@@ -57,8 +57,20 @@ bounds = (
     [0.0, 0.0, 0.0, 10.0, 10.0],   # min
     [5.0, 1.0, 15.0, 35.0, 90.0]   # max
 )
-df = df_merged.copy()
-result = least_squares(residuals, x0, bounds=bounds, args=(df,))
+PROD_COL = "ProdA"
+df_fit = df_merged.copy()
+df_fit[PROD_COL] = df_fit[PROD_COL].fillna(0)
+
+# 2) Tair : on interpole (sinon NaN -> NaN dans le modèle)
+df_fit["Tair"] = df_fit["Tair"].interpolate(limit_direction="both")
+
+# 3) Tot_PAR : on remplace NaN par 0 (pas de lumière mesurée)
+df_fit["Tot_PAR"] = df_fit["Tot_PAR"].fillna(0)
+
+# 4) On garde uniquement les lignes où Tair & Tot_PAR sont finies
+mask = np.isfinite(df_fit["Tair"]) & np.isfinite(df_fit["Tot_PAR"]) & np.isfinite(df_fit[PROD_COL])
+df_fit = df_fit.loc[mask].copy()
+result = least_squares(residuals, x0, bounds=bounds, args=(df_fit,))
 
 print("Succès ?", result.success)
 print("Message :", result.message)
@@ -74,13 +86,13 @@ print(" D (jours) =", D_fit)
 
 import matplotlib.pyplot as plt
 
-Prod_obs = df["ProdA"].fillna(0).values
-Prod_model = simulate_prod(result.x, df)
+Prod_obs = df_fit[PROD_COL].values
+Prod_model = simulate_prod(result.x, df_fit)
 
 plt.figure(figsize=(12, 6))
-plt.plot(df.index, Prod_obs, label="ProdA observée")
-plt.plot(df.index, Prod_model, label="ProdA modèle", linestyle="--")
-plt.xlabel("Temps (index ou date)")
+plt.plot(df_fit.index, Prod_obs, label="ProdA observée")
+plt.plot(df_fit.index, Prod_model, label="ProdA modèle", linestyle="--")
+plt.xlabel("Temps (index ou %time)")
 plt.ylabel("Production (kg/m²/j)")
 plt.title("Production de tomates : modèle dynamique à retard vs données")
 plt.legend()
